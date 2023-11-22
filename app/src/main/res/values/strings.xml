@@ -2,7 +2,8 @@
     <string name="app_name">TaskApp</string>
     <string name="action_settings">Settings</string>
     <!-- Strings used for fragments for navigation -->
-   　<string name="input_title_hint">タイトル</string>
+    　
+    <string name="input_title_hint">タイトル</string>
     <string name="input_content_hint">内容</string>
     <string name="input_category_hint">カテゴリ</string>
     <string name="button_date_text">----/--/--</string>

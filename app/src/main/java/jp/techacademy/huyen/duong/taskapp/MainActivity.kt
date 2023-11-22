@@ -137,30 +137,12 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Realmデータベースとの接続を開く
-        val config = RealmConfiguration.create(schema = setOf(Task::class))
+        val config = RealmConfiguration.create(schema = setOf(Task::class,Category::class))
         realm = Realm.open(config)
 
         // Realmからタスクの一覧を取得
         var tasks = realm.query<Task>().sort("date", Sort.DESCENDING).find()
 
-        binding.saveButton.setOnClickListener() {
-            val category:String = binding.searchEditText.text.toString()
-            tasks = realm.query<Task>("category=='${category}'").sort("date", Sort.DESCENDING).find()
-            CoroutineScope(Dispatchers.Default).launch {
-                tasks.asFlow().collect {
-                    reloadListView(it.list)
-                }
-            }
-        }
-        binding.cancelButton.setOnClickListener {
-            binding.searchEditText.setText("")
-            tasks = realm.query<Task>().sort("date", Sort.DESCENDING).find()
-            CoroutineScope(Dispatchers.Default).launch {
-                tasks.asFlow().collect {
-                    reloadListView(it.list)
-                }
-            }
-        }
         // Realmが起動、または更新（追加、変更、削除）時にreloadListViewを実行する
         CoroutineScope(Dispatchers.Default).launch {
             tasks.asFlow().collect {
@@ -190,7 +172,6 @@ class MainActivity : AppCompatActivity() {
             taskAdapter.updateTaskList(tasks)
         }
     }
-
 }
 
 const val EXTRA_TASK = "jp.techacademy.huyen.duong.taskapp.TASK"

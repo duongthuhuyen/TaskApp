@@ -1,24 +1,29 @@
 package jp.techacademy.huyen.duong.taskapp
 
-import android.app.AlarmManager
+import jp.techacademy.huyen.duong.taskapp.R.*
+import android.app.*
 import android.app.AlarmManager.AlarmClockInfo
-import android.app.DatePickerDialog
-import android.app.PendingIntent
-import android.app.TimePickerDialog
+import android.content.DialogInterface
 import android.content.Intent
 import android.os.Bundle
 import android.util.Log
+import android.view.LayoutInflater
 import android.view.View
+import android.widget.Button
+import android.widget.EditText
 import androidx.appcompat.app.AppCompatActivity
 import io.realm.kotlin.Realm
 import io.realm.kotlin.RealmConfiguration
+import io.realm.kotlin.UpdatePolicy
 import io.realm.kotlin.ext.query
+import io.realm.kotlin.query.RealmResults
 import jp.techacademy.huyen.duong.taskapp.databinding.ActivityInputBinding
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlin.collections.ArrayList
 
 
 class InputActivity : AppCompatActivity() {
@@ -26,6 +31,9 @@ class InputActivity : AppCompatActivity() {
 
     private lateinit var realm: Realm
     private lateinit var task: Task
+    private var selected: Int = -1
+    private var category: Category = Category()
+    private lateinit var listCategories: List<Category>
     private var calendar = Calendar.getInstance(Locale.JAPANESE)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -38,7 +46,6 @@ class InputActivity : AppCompatActivity() {
         if (supportActionBar != null) {
             supportActionBar!!.setDisplayHomeAsUpEnabled(true)
         }
-
         // ボタンのイベントリスナーの設定
         binding.content.dateButton.setOnClickListener(dateClickListener)
         binding.content.timeButton.setOnClickListener(timeClickListener)
@@ -49,11 +56,57 @@ class InputActivity : AppCompatActivity() {
         val taskId = intent.getIntExtra(EXTRA_TASK, -1)
 
         // Realmデータベースとの接続を開く
-        val config = RealmConfiguration.create(schema = setOf(Task::class))
+        val config = RealmConfiguration.create(schema = setOf(Task::class, Category::class))
         realm = Realm.open(config)
 
-        // タスクを取得または初期化
         initTask(taskId)
+        // タスクを取得または初期化
+        binding.content.categoryButton.setOnClickListener() {
+            // category 取得
+            var listLabel = mutableListOf<String>()
+            var categories = realm.query<Category>().find()
+            if (categories != null) {
+                listCategories = realm.copyFromRealm(categories)
+                Log.d("Data", "" + listCategories.size)
+                if (listCategories.size > 0) {
+                    for (i in listCategories.indices) {
+                        listLabel.add(listCategories[i].categoryName)
+                    }
+                }
+            }
+            val builder: AlertDialog.Builder = AlertDialog.Builder(this)
+            val inflater: LayoutInflater = LayoutInflater.from(this)
+            val promptView: View = inflater.inflate(R.layout.category_input, null)
+            builder
+                .setTitle("アテゴリ")
+                .setView(promptView)
+
+                .setPositiveButton("Add Category") { dialog, which ->
+                    // Do something.
+                    if (selected > -1) {
+                        Log.d("InputText", selected.toString())
+                        binding.content.categoryText.setText(listCategories[selected].categoryName)
+                        dialog.dismiss()
+                    }
+                }
+                .setNegativeButton("Cancel") { dialog, which ->
+                    // Do something else.
+                    dialog.cancel()
+                }
+                .setSingleChoiceItems(
+                    listLabel.toTypedArray(), -1,
+                ) { dialog, which ->
+                    selected = which
+                }
+
+            val dialog: AlertDialog = builder.create()
+            dialog.show()
+            var button: Button = dialog.findViewById<Button>(R.id.save_button)
+            var editText: EditText = dialog.findViewById<EditText>(R.id.category_edit_text)
+            button.setOnClickListener() {
+                addCategory(editText.text.toString())
+            }
+        }
     }
 
     override fun onDestroy() {
@@ -131,7 +184,8 @@ class InputActivity : AppCompatActivity() {
             // taskの値を画面項目に反映
             binding.content.titleEditText.setText(task.title)
             binding.content.contentEditText.setText(task.contents)
-            binding.content.categoryEditText.setText(task.category)
+            //binding.content.categoryText.setText(task.category?.categoryName ?: "")
+            // task.categoryName?.let { binding.content.mySpinner.setSelection(it.id) }
         }
 
         // 日付と時刻のボタンの表示を設定
@@ -148,7 +202,6 @@ class InputActivity : AppCompatActivity() {
         // 登録（更新）する値を取得
         val title = binding.content.titleEditText.text.toString()
         val content = binding.content.contentEditText.text.toString()
-        val category = binding.content.categoryEditText.text.toString()
         val date = simpleDateFormat.format(calendar.time)
 
         if (task.id == -1) {
@@ -160,13 +213,20 @@ class InputActivity : AppCompatActivity() {
             task.title = title
             task.contents = content
             task.date = date
-            task.category = category
+            //           task.category= listCategories[selected]
 
             // 登録処理
+            val ca = realm.query<Category>("id = ${listCategories[selected].id}").find().first()
             realm.writeBlocking {
                 copyToRealm(task)
+                ca.tasks.add(task)
+                //updateCategory(listCategories[selected],task)
+               // copyToRealm(ca,UpdatePolicy.ALL)
             }
+
         } else {
+            val ca = realm.query<Category>("id = ${listCategories[selected].id}").find().first()
+            ca.tasks.add(task)
             // 更新
             realm.write {
                 findLatest(task)?.apply {
@@ -174,11 +234,11 @@ class InputActivity : AppCompatActivity() {
                     this.title = title
                     this.contents = content
                     this.date = date
-                    this.category = category
+                    //                   this.category = listCategories[selected]
                 }
+               // findLatest(ca)
             }
         }
-
         // タスクの日時にアラームを設定
         val intent = Intent(applicationContext, TaskAlarmReceiver::class.java)
         intent.putExtra(EXTRA_TASK, task.id)
@@ -204,4 +264,35 @@ class InputActivity : AppCompatActivity() {
         binding.content.timeButton.text = timeFormat.format(calendar.time)
 
     }
+
+    /**
+     * アテゴリの登録を行う
+     */
+    private fun addCategory(name: String) {
+        Log.d("Name", name)
+        if (name != null && name != "") {
+            // 最大のid+1をセット
+            category.id = (realm.query<Category>().max("id", Int::class).find() ?: -1) + 1
+            category.categoryName = name
+            // 登録処理
+            realm.writeBlocking {
+                copyToRealm(category)
+            }
+        }
+    }
+
+    private suspend fun updateCategory(catego: Category, task: Task) {
+
+        var cat = realm.query<Category>("id = ${catego.id}").find()
+        if (cat != null) {
+            //catego.tasks.add(task)
+            realm.write {
+                findLatest(catego)?.apply {
+                    // 画面項目の値で更新
+                    this.tasks.add(task)
+                }
+            }
+        }
+    }
+
 }
