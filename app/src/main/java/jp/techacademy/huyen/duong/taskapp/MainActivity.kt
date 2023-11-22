@@ -9,6 +9,10 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
+import android.view.LayoutInflater
+import android.view.View
+import android.widget.Button
+import android.widget.EditText
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -27,6 +31,10 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var taskAdapter: TaskAdapter
     private lateinit var realm: Realm
+    private var selected: Int = -1
+    private lateinit var listCategories: List<Category>
+    private var listLabel = mutableListOf<String>()
+    private lateinit var dialog: android.app.AlertDialog
 
     private val requestPermissonLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
@@ -155,6 +163,28 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+        // Filter
+        binding.categoryButton.setOnClickListener(){
+            showDialog()
+        }
+        binding.saveButton.setOnClickListener() {
+            val category:Int = listCategories[selected].id
+            tasks = realm.query<Task>("category==${category}").sort("date", Sort.DESCENDING).find()
+            CoroutineScope(Dispatchers.Default).launch {
+                tasks.asFlow().collect {
+                    reloadListView(it.list)
+                }
+            }
+        }
+        binding.cancelButton.setOnClickListener {
+            binding.categoryText.setText("")
+            tasks = realm.query<Task>().sort("date", Sort.DESCENDING).find()
+            CoroutineScope(Dispatchers.Default).launch {
+                tasks.asFlow().collect {
+                    reloadListView(it.list)
+                }
+            }
+        }
     }
 
     override fun onDestroy() {
@@ -171,6 +201,46 @@ class MainActivity : AppCompatActivity() {
         withContext(Dispatchers.Main) {
             taskAdapter.updateTaskList(tasks)
         }
+    }
+    private fun getLable() {
+        var categories = realm.query<Category>().find()
+        if (categories != null) {
+            listCategories = realm.copyFromRealm(categories)
+            listLabel.clear()
+            if (listCategories.size > 0) {
+                for (i in listCategories.indices) {
+                    listLabel.add(listCategories[i].categoryName)
+                }
+            }
+        }
+    }
+
+    private fun showDialog() {
+        getLable()
+        val builder: android.app.AlertDialog.Builder = android.app.AlertDialog.Builder(this)
+        builder
+            .setTitle("アテゴリ")
+
+            .setPositiveButton("Add Category") { dialog, which ->
+                // Do something.
+                if (selected > -1) {
+                    Log.d("InputText", selected.toString())
+                    binding.categoryText.setText(listCategories[selected].categoryName)
+                    dialog.dismiss()
+                }
+            }
+            .setNegativeButton("Cancel") { dialog, which ->
+                // Do something else.
+                dialog.cancel()
+            }
+            .setSingleChoiceItems(
+                listLabel.toTypedArray(), -1,
+            ) { dialog, which ->
+                selected = which
+            }
+
+        dialog = builder.create()
+        dialog.show()
     }
 }
 

@@ -3,7 +3,6 @@ package jp.techacademy.huyen.duong.taskapp
 import jp.techacademy.huyen.duong.taskapp.R.*
 import android.app.*
 import android.app.AlarmManager.AlarmClockInfo
-import android.content.DialogInterface
 import android.content.Intent
 import android.os.Bundle
 import android.util.Log
@@ -34,6 +33,10 @@ class InputActivity : AppCompatActivity() {
     private var selected: Int = -1
     private var category: Category = Category()
     private lateinit var listCategories: List<Category>
+    private var listLabel = mutableListOf<String>()
+    private lateinit var button: Button
+    private lateinit var editText: EditText
+    private lateinit var dialog: AlertDialog
     private var calendar = Calendar.getInstance(Locale.JAPANESE)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -63,48 +66,10 @@ class InputActivity : AppCompatActivity() {
         // タスクを取得または初期化
         binding.content.categoryButton.setOnClickListener() {
             // category 取得
-            var listLabel = mutableListOf<String>()
-            var categories = realm.query<Category>().find()
-            if (categories != null) {
-                listCategories = realm.copyFromRealm(categories)
-                Log.d("Data", "" + listCategories.size)
-                if (listCategories.size > 0) {
-                    for (i in listCategories.indices) {
-                        listLabel.add(listCategories[i].categoryName)
-                    }
-                }
-            }
-            val builder: AlertDialog.Builder = AlertDialog.Builder(this)
-            val inflater: LayoutInflater = LayoutInflater.from(this)
-            val promptView: View = inflater.inflate(R.layout.category_input, null)
-            builder
-                .setTitle("アテゴリ")
-                .setView(promptView)
-
-                .setPositiveButton("Add Category") { dialog, which ->
-                    // Do something.
-                    if (selected > -1) {
-                        Log.d("InputText", selected.toString())
-                        binding.content.categoryText.setText(listCategories[selected].categoryName)
-                        dialog.dismiss()
-                    }
-                }
-                .setNegativeButton("Cancel") { dialog, which ->
-                    // Do something else.
-                    dialog.cancel()
-                }
-                .setSingleChoiceItems(
-                    listLabel.toTypedArray(), -1,
-                ) { dialog, which ->
-                    selected = which
-                }
-
-            val dialog: AlertDialog = builder.create()
-            dialog.show()
-            var button: Button = dialog.findViewById<Button>(R.id.save_button)
-            var editText: EditText = dialog.findViewById<EditText>(R.id.category_edit_text)
+            showDialog()
             button.setOnClickListener() {
                 addCategory(editText.text.toString())
+                dialog.cancel()
             }
         }
     }
@@ -176,7 +141,7 @@ class InputActivity : AppCompatActivity() {
         } else {
             // 更新の場合
             task = findTask
-
+            var ca = realm.query<Category>("id =${task.category}").find().first()
             // taskの日時をcalendarに反映
             val simpleDateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.JAPANESE)
             calendar.time = simpleDateFormat.parse(task.date) as Date
@@ -184,8 +149,7 @@ class InputActivity : AppCompatActivity() {
             // taskの値を画面項目に反映
             binding.content.titleEditText.setText(task.title)
             binding.content.contentEditText.setText(task.contents)
-            //binding.content.categoryText.setText(task.category?.categoryName ?: "")
-            // task.categoryName?.let { binding.content.mySpinner.setSelection(it.id) }
+            binding.content.categoryText.setText(ca.categoryName)
         }
 
         // 日付と時刻のボタンの表示を設定
@@ -213,20 +177,17 @@ class InputActivity : AppCompatActivity() {
             task.title = title
             task.contents = content
             task.date = date
-            //           task.category= listCategories[selected]
+            task.category = listCategories[selected].id
 
             // 登録処理
-            val ca = realm.query<Category>("id = ${listCategories[selected].id}").find().first()
+
             realm.writeBlocking {
                 copyToRealm(task)
-                ca.tasks.add(task)
-                //updateCategory(listCategories[selected],task)
-               // copyToRealm(ca,UpdatePolicy.ALL)
             }
 
         } else {
-            val ca = realm.query<Category>("id = ${listCategories[selected].id}").find().first()
-            ca.tasks.add(task)
+            //val ca = realm.query<Category>("id = ${listCategories[selected].id}").find().first()
+
             // 更新
             realm.write {
                 findLatest(task)?.apply {
@@ -234,9 +195,8 @@ class InputActivity : AppCompatActivity() {
                     this.title = title
                     this.contents = content
                     this.date = date
-                    //                   this.category = listCategories[selected]
+                    this.category = listCategories[selected].id
                 }
-               // findLatest(ca)
             }
         }
         // タスクの日時にアラームを設定
@@ -281,18 +241,58 @@ class InputActivity : AppCompatActivity() {
         }
     }
 
-    private suspend fun updateCategory(catego: Category, task: Task) {
-
-        var cat = realm.query<Category>("id = ${catego.id}").find()
-        if (cat != null) {
-            //catego.tasks.add(task)
-            realm.write {
-                findLatest(catego)?.apply {
-                    // 画面項目の値で更新
-                    this.tasks.add(task)
+    private fun getLable() {
+        var categories = realm.query<Category>().find()
+        if (categories != null) {
+            listCategories = realm.copyFromRealm(categories)
+            listLabel.clear()
+            if (listCategories.size > 0) {
+                for (i in listCategories.indices) {
+                    listLabel.add(listCategories[i].categoryName)
                 }
             }
         }
     }
 
+    private fun showDialog() {
+        getLable()
+        val builder: AlertDialog.Builder = AlertDialog.Builder(this)
+        val inflater: LayoutInflater = LayoutInflater.from(this)
+        val promptView: View = inflater.inflate(R.layout.category_input, null)
+        builder
+            .setTitle("アテゴリ")
+            .setView(promptView)
+
+            .setPositiveButton("Add Category") { dialog, which ->
+                // Do something.
+                if (selected > -1) {
+                    Log.d("InputText", selected.toString())
+                    binding.content.categoryText.setText(listCategories[selected].categoryName)
+                    dialog.dismiss()
+                }
+            }
+            .setNegativeButton("Cancel") { dialog, which ->
+                // Do something else.
+                dialog.cancel()
+            }
+            .setSingleChoiceItems(
+                listLabel.toTypedArray(), selected,
+            ) { dialog, which ->
+                selected = which
+            }
+
+        dialog = builder.create()
+        dialog.show()
+        button = dialog.findViewById<Button>(R.id.save_button)
+        editText = dialog.findViewById<EditText>(R.id.category_edit_text)
+    }
+
+    private fun findIndex(categories: List<Category>, id: Int): Int {
+        for (i in categories.indices) {
+            if (id == categories[i].id) {
+                return i
+            }
+        }
+        return -1
+    }
 }

@@ -11,5 +11,5 @@ open class Task : RealmObject,java.io.Serializable{
     var title = ""
     var contents = ""
     var date = ""
-    //var category: Category? = null
+    var category: Int? = null
 }

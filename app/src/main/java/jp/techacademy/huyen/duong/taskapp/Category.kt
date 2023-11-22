@@ -11,5 +11,4 @@ open class Category: RealmObject, java.io.Serializable {
     @PrimaryKey
     var id = 0
     var categoryName = ""
-    var tasks: RealmList<Task> = realmListOf()
 }
